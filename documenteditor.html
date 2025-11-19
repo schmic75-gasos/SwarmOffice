@@ -45,6 +45,43 @@
   }
   .control-group { display:flex; gap:6px; align-items:center; }
   .tiny { width: 90px; padding:6px; }
+  .loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.conversion-notice {
+    background: #e3f2fd;
+    border: 1px solid #2196f3;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #1976d2;
+}
+
+.conversion-notice.success {
+    background: #e8f5e8;
+    border-color: #4caf50;
+    color: #2e7d32;
+}
+
+.conversion-notice.warning {
+    background: #fff3cd;
+    border-color: #ffc107;
+    color: #856404;
+}
 </style>
 </head>
 <body>
@@ -90,6 +127,10 @@
   <button id="toggleDir">LTR / RTL</button>
 
   <button id="saveDoc">Export .DOC</button>
+
+  <button id="saveToCloud">💾 Save to Cloud</button>
+
+  <button id="loadFromCloud">☁️ Load from Cloud</button>
 
   <label class="small">Šířka (cm):</label>
   <input type="number" id="widthInput" class="tiny" min="1" step="0.1" value="21">
@@ -271,6 +312,334 @@ document.getElementById('saveDoc').addEventListener('click', function() {
     link.click();
 });
 
+</script>
+<script>
+  // Cloud functionality
+document.getElementById('saveToCloud').addEventListener('click', function() {
+    if (!localStorage.token) {
+        alert('Please login to save to cloud');
+        return;
+    }
+
+    // Convert document to Blob
+    const content = editor.innerHTML;
+    const blob = new Blob([content], { type: 'application/msword' });
+    const file = new File([blob], 'document.doc', { type: 'application/msword' });
+
+    // Upload to cloud
+    uploadToCloud(file);
+});
+
+async function uploadToCloud(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/api/cloud/upload', {
+            method: 'POST',
+            headers: {
+                'Authorization': localStorage.token
+            },
+            body: formData
+        });
+
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert('Document saved to cloud successfully!');
+        } else {
+            alert('Error: ' + result.error);
+        }
+    } catch (error) {
+        alert('Error uploading file: ' + error.message);
+    }
+}
+</script>
+<script>
+  // Cloud import functionality
+document.getElementById('loadFromCloud').addEventListener('click', openCloudModal);
+
+function openCloudModal() {
+    if (!localStorage.token) {
+        alert('Please login to access cloud files');
+        return;
+    }
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    `;
+    
+    modal.innerHTML = `
+        <div style="background: white; padding: 20px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">Load Document from Cloud</h2>
+                <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: none; border: none; font-size: 20px; cursor: pointer;">✕</button>
+            </div>
+            <div id="cloudDocsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px;"></div>
+            <div id="cloudDocStatus" style="margin-top: 20px; text-align: center; color: #666;"></div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    loadCloudDocuments();
+}
+
+async function loadCloudDocuments() {
+    const statusEl = document.getElementById('cloudDocStatus');
+    const gridEl = document.getElementById('cloudDocsGrid');
+    
+    statusEl.textContent = 'Loading documents...';
+    statusEl.style.color = '#666';
+    
+    try {
+        const response = await fetch('/api/cloud/files', {
+            headers: {
+                'Authorization': localStorage.token
+            }
+        });
+
+        if (response.ok) {
+            const files = await response.json();
+            const docFiles = files.filter(file => file.type === 'document');
+            
+            if (docFiles.length === 0) {
+                statusEl.innerHTML = `
+                    <div style="text-align: center; padding: 20px;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📁</div>
+                        <h4 style="margin-bottom: 8px;">No documents found</h4>
+                        <p style="color: #666; font-size: 14px;">Upload some documents to your cloud storage first.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            gridEl.innerHTML = '';
+            statusEl.textContent = `Found ${docFiles.length} documents`;
+
+            docFiles.forEach(file => {
+                const fileCard = document.createElement('div');
+                fileCard.style.cssText = `
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 12px;
+                    padding: 20px;
+                    text-align: center;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    border: 2px solid transparent;
+                    color: white;
+                    position: relative;
+                    overflow: hidden;
+                `;
+                
+                const fileExtension = file.filename.split('.').pop().toUpperCase();
+                const isWordDoc = ['DOC', 'DOCX'].includes(fileExtension);
+                
+                fileCard.innerHTML = `
+                    <div style="font-size: 48px; margin-bottom: 12px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+                        ${isWordDoc ? '📝' : '📄'}
+                    </div>
+                    <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; line-height: 1.3; height: 2.8rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                        ${file.filename}
+                    </div>
+                    <div style="font-size: 11px; opacity: 0.9; margin-bottom: 4px;">
+                        ${fileExtension} • ${formatFileSize(file.size)}
+                    </div>
+                    <div style="font-size: 10px; opacity: 0.7;">
+                        ${new Date(file.upload_date).toLocaleDateString()}
+                    </div>
+                    ${isWordDoc ? 
+                        '<div style="position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 8px; font-size: 9px;">Auto-Convert</div>' : 
+                        ''
+                    }
+                `;
+
+                fileCard.addEventListener('click', async () => {
+                    statusEl.innerHTML = `<div style="color: #2196f3;">🔄 Loading and converting "${file.filename}"...</div>`;
+                    await loadDocumentFromCloud(file.id);
+                    document.querySelector('[style*="position: fixed; top: 0"]').remove();
+                });
+
+                fileCard.addEventListener('mouseenter', () => {
+                    fileCard.style.transform = 'translateY(-4px) scale(1.02)';
+                    fileCard.style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)';
+                    fileCard.style.borderColor = 'rgba(255,255,255,0.5)';
+                });
+
+                fileCard.addEventListener('mouseleave', () => {
+                    fileCard.style.transform = 'translateY(0) scale(1)';
+                    fileCard.style.boxShadow = 'none';
+                    fileCard.style.borderColor = 'transparent';
+                });
+
+                gridEl.appendChild(fileCard);
+            });
+        } else {
+            statusEl.innerHTML = `<div style="color: #f44336;">❌ Error loading cloud files</div>`;
+        }
+    } catch (error) {
+        statusEl.innerHTML = `<div style="color: #f44336;">❌ Error: ${error.message}</div>`;
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+async function loadDocumentFromCloud(fileId) {
+    const statusEl = document.getElementById('cloudDocStatus') || { textContent: '' };
+    statusEl.textContent = 'Converting document...';
+    
+    try {
+        // First try to get converted HTML
+        const convertResponse = await fetch(`/api/cloud/convert/${fileId}`, {
+            headers: {
+                'Authorization': localStorage.token
+            }
+        });
+
+        if (convertResponse.ok) {
+            const result = await convertResponse.json();
+            
+            if (result.html) {
+                // Load converted HTML into editor
+                const firstPage = document.querySelector('.page');
+                if (firstPage) {
+                    // Clear existing content but keep the basic structure
+                    firstPage.innerHTML = '<div>' + result.html + '</div>';
+                    statusEl.textContent = 'Document loaded successfully!';
+                    
+                    // Show conversion method info
+                    setTimeout(() => {
+                        alert(`Document converted using ${result.method || 'auto-conversion'}. Some formatting may differ from the original.`);
+                    }, 500);
+                }
+                return;
+            }
+        }
+
+        // Fallback: download original file
+        const downloadResponse = await fetch(`/api/cloud/download/${fileId}`, {
+            headers: {
+                'Authorization': localStorage.token
+            }
+        });
+
+        if (downloadResponse.ok) {
+            const blob = await downloadResponse.blob();
+            
+            if (blob.type.includes('word') || blob.type.includes('document')) {
+                // Try direct conversion
+                await convertAndLoadDocFile(blob, fileId);
+            } else {
+                // For HTML files, load directly
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const firstPage = document.querySelector('.page');
+                    if (firstPage) {
+                        firstPage.innerHTML = e.target.result;
+                    }
+                };
+                reader.readAsText(blob);
+            }
+        } else {
+            statusEl.textContent = 'Error loading document';
+        }
+    } catch (error) {
+        statusEl.textContent = 'Error: ' + error.message;
+        console.error('Load error:', error);
+    }
+}
+
+async function convertAndLoadDocFile(blob, fileId) {
+    const formData = new FormData();
+    formData.append('file', blob, `document_${fileId}.doc`);
+    
+    try {
+        const response = await fetch('/api/convert/doc-to-html', {
+            method: 'POST',
+            headers: {
+                'Authorization': localStorage.token
+            },
+            body: formData
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            
+            if (result.html) {
+                const firstPage = document.querySelector('.page');
+                if (firstPage) {
+                    firstPage.innerHTML = '<div>' + result.html + '</div>';
+                    
+                    // Show conversion info
+                    setTimeout(() => {
+                        const conversionInfo = document.createElement('div');
+                        conversionInfo.style.cssText = `
+                            background: #e3f2fd;
+                            border: 1px solid #2196f3;
+                            border-radius: 4px;
+                            padding: 10px;
+                            margin: 10px 0;
+                            font-size: 12px;
+                            color: #1976d2;
+                        `;
+                        conversionInfo.innerHTML = `
+                            <strong>🔄 Document Converted</strong><br>
+                            Converted using ${result.method}. Some complex formatting may not be preserved.
+                        `;
+                        firstPage.insertBefore(conversionInfo, firstPage.firstChild);
+                    }, 100);
+                }
+            }
+        } else {
+            throw new Error('Conversion failed');
+        }
+    } catch (error) {
+        console.error('Conversion error:', error);
+        
+        // Ultimate fallback - show informative message
+        const firstPage = document.querySelector('.page');
+        if (firstPage) {
+            firstPage.innerHTML = `
+                <div style="padding: 40px; text-align: center; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px;">
+                    <div style="font-size: 48px; margin-bottom: 20px;">📄</div>
+                    <h3 style="color: #856404; margin-bottom: 16px;">Document Ready for Editing</h3>
+                    <p style="color: #856404; margin-bottom: 20px;">
+                        Your document has been loaded from cloud storage.<br>
+                        Start typing to begin editing, or use the formatting tools above.
+                    </p>
+                    <button onclick="this.parentElement.parentElement.innerHTML = '<div><br></div>'" 
+                            style="background: #856404; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer;">
+                        Start Editing
+                    </button>
+                </div>
+            `;
+        }
+    }
+}
+</script>
+<script>
+  // Check for cloud file in URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const cloudFileId = urlParams.get('cloudFile');
+if (cloudFileId && localStorage.token) {
+    loadDocumentFromCloud(cloudFileId);
+}
 </script>
 </body>
 </html>

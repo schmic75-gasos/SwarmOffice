@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Storage - Swarm Office</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --bg-light: #ffffff;
+            --bg-secondary: #f8fafc;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-secondary);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .header {
+            background: var(--bg-light);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .upload-area {
+            background: var(--bg-light);
+            border: 2px dashed var(--border);
+            border-radius: 16px;
+            padding: 3rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        .upload-area.dragover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .upload-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 4px;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.3s;
+            border-radius: 0 0 16px 16px;
+        }
+
+        .files-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .file-card {
+            background: var(--bg-light);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .file-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .file-preview {
+            height: 160px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .file-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .file-icon {
+            font-size: 3rem;
+            opacity: 0.7;
+        }
+
+        .file-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--primary);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .file-info {
+            margin-bottom: 1rem;
+        }
+
+        .file-name {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+
+        .file-meta {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .status-message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .status-success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .status-error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+
+        .login-prompt {
+            text-align: center;
+            padding: 3rem;
+            background: var(--bg-light);
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(-10px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .public-badge {
+            background: var(--success);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            margin-left: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="index.html" class="logo">SWARM OFFICE CLOUD</a>
+        <div>
+            <a href="index.html" class="btn btn-primary">← Back to Editors</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="loginPrompt" class="login-prompt" style="display: none;">
+            <h2>Please Login</h2>
+            <p>You need to be logged in to access cloud storage.</p>
+            <a href="Login.html" class="btn btn-primary">Login</a>
+        </div>
+
+        <div id="cloudInterface" style="display: none;">
+            <div class="upload-area" id="uploadArea">
+                <h3>📁 Upload Files</h3>
+                <p>Drag & drop files here or click to browse</p>
+                <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">
+                    Supported: PNG, JPG, GIF, DOC, DOCX (Max 10MB)
+                </p>
+                <input type="file" id="fileInput" multiple style="display: none;" accept=".png,.jpg,.jpeg,.gif,.doc,.docx">
+                <div class="upload-progress" id="uploadProgress"></div>
+            </div>
+
+            <div class="status-message" id="statusMessage"></div>
+
+            <div class="files-grid" id="filesGrid">
+                <!-- Files will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const cloudInterface = document.getElementById('cloudInterface');
+        const loginPrompt = document.getElementById('loginPrompt');
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const filesGrid = document.getElementById('filesGrid');
+        const statusMessage = document.getElementById('statusMessage');
+        const uploadProgress = document.getElementById('uploadProgress');
+
+        // Check authentication
+        if (!localStorage.token) {
+            loginPrompt.style.display = 'block';
+        } else {
+            cloudInterface.style.display = 'block';
+            loadFiles();
+        }
+
+        // Upload area functionality
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        async function handleFiles(files) {
+            for (let file of files) {
+                await uploadFile(file);
+            }
+            loadFiles();
+        }
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Simulate progress
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 10;
+                if (progress >= 90) clearInterval(progressInterval);
+                uploadProgress.style.width = progress + '%';
+            }, 100);
+
+            try {
+                const response = await fetch('/api/cloud/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': localStorage.token
+                    },
+                    body: formData
+                });
+
+                clearInterval(progressInterval);
+                uploadProgress.style.width = '100%';
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus('File uploaded successfully!', 'success');
+                } else {
+                    showStatus('Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showStatus('Error uploading file: ' + error.message, 'error');
+            } finally {
+                setTimeout(() => {
+                    uploadProgress.style.width = '0%';
+                }, 500);
+            }
+        }
+
+        async function loadFiles() {
+            try {
+                const response = await fetch('/api/cloud/files', {
+                    headers: {
+                        'Authorization': localStorage.token
+                    }
+                });
+
+                if (response.ok) {
+                    const files = await response.json();
+                    displayFiles(files);
+                } else {
+                    showStatus('Error loading files', 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        function displayFiles(files) {
+            filesGrid.innerHTML = '';
+            
+            if (files.length === 0) {
+                filesGrid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <div class="empty-state-icon">☁️</div>
+                        <h3>No files yet</h3>
+                        <p>Upload some files to get started!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            files.forEach(file => {
+                const fileCard = document.createElement('div');
+                fileCard.className = 'file-card';
+                
+                const icon = file.type === 'image' ? '🖼️' : '📄';
+                const size = formatFileSize(file.size);
+                const date = new Date(file.upload_date).toLocaleDateString();
+                const previewUrl = file.type === 'image' ? `/api/cloud/download/${file.id}` : null;
+                
+                fileCard.innerHTML = `
+                    <div class="file-preview">
+                        ${previewUrl ? 
+                            `<img src="${previewUrl}" alt="${file.filename}" loading="lazy">` :
+                            `<div class="file-icon">${icon}</div>`
+                        }
+                        ${file.is_public ? '<div class="file-badge">Public</div>' : ''}
+                    </div>
+                    <div class="file-info">
+                        <div class="file-name">${file.filename}</div>
+                        <div class="file-meta">
+                            <span>${size}</span>
+                            <span>${date}</span>
+                        </div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="btn btn-primary" onclick="downloadFile(${file.id})" title="Download">
+                            ⬇️ Download
+                        </button>
+                        <button class="btn btn-warning" onclick="openFile(${file.id}, '${file.type}')" title="Open">
+                            🔍 Open
+                        </button>
+                        ${file.is_public ? 
+                            `<button class="btn btn-danger" onclick="unshareFile(${file.id})" title="Make Private">
+                                🔒 Private
+                            </button>` :
+                            `<button class="btn btn-success" onclick="shareFile(${file.id})" title="Make Public">
+                                🔗 Share
+                            </button>`
+                        }
+                        <button class="btn btn-danger" onclick="deleteFile(${file.id})" title="Delete">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                    ${file.is_public ? `
+                        <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+                            <strong>Public URL:</strong>
+                            <input type="text" value="${window.location.origin}${file.public_url}" readonly 
+                                style="width: 100%; padding: 0.25rem; font-size: 0.75rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-secondary); margin-top: 0.25rem;"
+                                onclick="this.select()">
+                        </div>
+                    ` : ''}
+                `;
+                
+                filesGrid.appendChild(fileCard);
+            });
+        }
+
+        function openFile(fileId, fileType) {
+            if (fileType === 'image') {
+                // Open image in picture editor
+                window.open(`pictureeditor.html?cloudFile=${fileId}`, '_blank');
+            } else {
+                // Open document in document editor
+                window.open(`documenteditor.html?cloudFile=${fileId}`, '_blank');
+            }
+        }
+
+        async function downloadFile(fileId) {
+            try {
+                const response = await fetch(`/api/cloud/download/${fileId}`, {
+                    headers: {
+                        'Authorization': localStorage.token
+                    }
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `file_${fileId}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showStatus('File downloaded successfully!', 'success');
+                } else {
+                    showStatus('Error downloading file', 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function shareFile(fileId) {
+            try {
+                const response = await fetch(`/api/cloud/files/${fileId}/share`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': localStorage.token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    showStatus('File is now publicly accessible', 'success');
+                    loadFiles();
+                } else {
+                    showStatus('Error sharing file', 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function unshareFile(fileId) {
+            try {
+                const response = await fetch(`/api/cloud/files/${fileId}/unshare`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': localStorage.token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    showStatus('File is now private', 'success');
+                    loadFiles();
+                } else {
+                    showStatus('Error updating file', 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteFile(fileId) {
+            if (!confirm('Are you sure you want to delete this file?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/cloud/files/${fileId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': localStorage.token
+                    }
+                });
+
+                if (response.ok) {
+                    showStatus('File deleted successfully', 'success');
+                    loadFiles();
+                } else {
+                    showStatus('Error deleting file', 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message show status-${type}`;
+            setTimeout(() => {
+                statusMessage.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

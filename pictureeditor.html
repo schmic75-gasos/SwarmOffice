@@ -647,6 +647,8 @@
                 <button class="btn-icon" id="themeToggle">🌙</button>
             </div>
             <button class="btn" id="downloadBtn">⬇ Download</button>
+            <button class="btn" id="saveToCloudBtn">☁️ Save to Cloud</button>
+            <button class="btn" id="loadFromCloudBtn">☁️ Load from Cloud</button>
         </div>
     </div>
 
@@ -1189,6 +1191,216 @@
         // Start
         init();
         if (isDarkMode) setupTheme();
+    </script>
+    <script>
+        // Cloud functionality for image editor
+document.getElementById('saveToCloudBtn').addEventListener('click', saveToCloud);
+
+function saveToCloud() {
+    if (!canvas) {
+        showStatus('No image to save', 'warning');
+        return;
+    }
+
+    if (!localStorage.token) {
+        showStatus('Please login to save to cloud', 'warning');
+        return;
+    }
+
+    canvas.toBlob(async (blob) => {
+        const file = new File([blob], 'edited-image.png', { type: 'image/png' });
+        
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch('/api/cloud/upload', {
+                method: 'POST',
+                headers: {
+                    'Authorization': localStorage.token
+                },
+                body: formData
+            });
+
+            const result = await response.json();
+            
+            if (response.ok) {
+                showStatus('Image saved to cloud successfully!', 'success');
+            } else {
+                showStatus('Error: ' + result.error, 'warning');
+            }
+        } catch (error) {
+            showStatus('Error uploading file: ' + error.message, 'warning');
+        }
+    }, 'image/png');
+}
+    </script>
+    <script>
+        // Cloud import functionality
+document.getElementById('loadFromCloudBtn').addEventListener('click', openCloudModal);
+
+function openCloudModal() {
+    if (!localStorage.token) {
+        showStatus('Please login to access cloud files', 'warning');
+        return;
+    }
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 800px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">Load Image from Cloud</h2>
+                <button class="btn-icon" id="closeCloudModal" style="background: transparent;">✕</button>
+            </div>
+            <div id="cloudFilesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; max-height: 400px; overflow-y: auto;"></div>
+            <div style="margin-top: 20px; text-align: center; color: var(--text-muted);" id="cloudStatus"></div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('closeCloudModal').addEventListener('click', () => {
+        document.body.removeChild(modal);
+    });
+
+    loadCloudImages();
+}
+
+async function loadCloudImages() {
+    const statusEl = document.getElementById('cloudStatus');
+    const gridEl = document.getElementById('cloudFilesGrid');
+    
+    statusEl.textContent = 'Loading images...';
+    
+    try {
+        const response = await fetch('/api/cloud/files', {
+            headers: {
+                'Authorization': localStorage.token
+            }
+        });
+
+        if (response.ok) {
+            const files = await response.json();
+            const imageFiles = files.filter(file => file.type === 'image');
+            
+            if (imageFiles.length === 0) {
+                statusEl.textContent = 'No images found in your cloud storage.';
+                return;
+            }
+
+            gridEl.innerHTML = '';
+            statusEl.textContent = `Found ${imageFiles.length} images`;
+
+            imageFiles.forEach(file => {
+                const fileCard = document.createElement('div');
+                fileCard.className = 'cloud-file-card';
+                fileCard.style.cssText = `
+                    background: var(--bg-light);
+                    border-radius: 8px;
+                    padding: 12px;
+                    text-align: center;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    border: 2px solid transparent;
+                `;
+                
+                fileCard.innerHTML = `
+                    <div style="width: 100px; height: 100px; margin: 0 auto 8px; background: var(--bg-secondary-light); border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                        <img src="/api/cloud/download/${file.id}" alt="${file.filename}" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                    </div>
+                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.filename}</div>
+                    <div style="font-size: 10px; color: var(--text-muted);">${new Date(file.upload_date).toLocaleDateString()}</div>
+                `;
+
+                fileCard.addEventListener('click', () => {
+                    loadImageFromCloud(file.id);
+                    document.body.removeChild(document.querySelector('.modal'));
+                });
+
+                fileCard.addEventListener('mouseenter', () => {
+                    fileCard.style.borderColor = 'var(--primary)';
+                    fileCard.style.transform = 'translateY(-2px)';
+                });
+
+                fileCard.addEventListener('mouseleave', () => {
+                    fileCard.style.borderColor = 'transparent';
+                    fileCard.style.transform = 'translateY(0)';
+                });
+
+                gridEl.appendChild(fileCard);
+            });
+        } else {
+            statusEl.textContent = 'Error loading cloud files';
+        }
+    } catch (error) {
+        statusEl.textContent = 'Error: ' + error.message;
+    }
+}
+
+async function loadImageFromCloud(fileId) {
+    showStatus('Loading image from cloud...', 'success');
+    
+    try {
+        const response = await fetch(`/api/cloud/download/${fileId}`, {
+            headers: {
+                'Authorization': localStorage.token
+            }
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const img = new Image();
+            
+            img.onload = function() {
+                originalImage = img;
+                editedImage = new Image();
+                editedImage.src = img.src;
+
+                // Setup canvas
+                canvas.width = img.width;
+                canvas.height = img.height;
+                
+                // Show canvas, hide upload zone
+                document.getElementById('uploadZone').style.display = 'none';
+                canvas.style.display = 'block';
+                document.getElementById('adjustmentsPanel').style.display = 'block';
+                
+                // Draw image
+                ctx.drawImage(img, 0, 0);
+                
+                // Update info
+                document.getElementById('imageResolution').textContent = `${img.width} × ${img.height}px`;
+                document.getElementById('imageSize').textContent = `${(blob.size / 1024).toFixed(2)} KB`;
+                document.getElementById('imageFormat').textContent = 'PNG';
+                
+                // Reset filters
+                resetFilters();
+                
+                // Clear history
+                history = [];
+                historyIndex = -1;
+                saveToHistory();
+                
+                showStatus('Image loaded from cloud!', 'success');
+            };
+            
+            img.src = URL.createObjectURL(blob);
+        } else {
+            showStatus('Error loading image from cloud', 'warning');
+        }
+    } catch (error) {
+        showStatus('Error: ' + error.message, 'warning');
+    }
+}
+    </script>
+    <script>
+        // Check for cloud file in URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const cloudFileId = urlParams.get('cloudFile');
+if (cloudFileId && localStorage.token) {
+    loadImageFromCloud(cloudFileId);
+}
     </script>
 </body>
 </html>
